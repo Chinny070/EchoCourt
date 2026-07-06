@@ -107,7 +107,7 @@ export async function sendTransaction(
       address: CONTRACT_ADDRESS,
       functionName: method,
       args,
-      value: 0n,
+      value: BigInt(0),
     });
     return { hash: hash as string, status: 'pending' };
   } catch (err: unknown) {
