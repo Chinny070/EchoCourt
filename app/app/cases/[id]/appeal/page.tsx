@@ -25,7 +25,7 @@ const appealLabels: Record<string, string> = {
 export default function AppealPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [basis, setBasis] = useState(APPEAL_BASES[0]);
+  const [basis, setBasis] = useState<string>(APPEAL_BASES[0]);
   const [explanation, setExplanation] = useState('');
   const [requestedCorrection, setRequestedCorrection] = useState('');
   const [newEvidence, setNewEvidence] = useState<{ label: string; url: string; summary: string }[]>([
