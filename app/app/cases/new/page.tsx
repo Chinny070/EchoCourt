@@ -17,7 +17,7 @@ export default function CaseIntakePage() {
   const router = useRouter();
   const [communityId, setCommunityId] = useState('');
   const [caseTitle, setCaseTitle] = useState('');
-  const [caseType, setCaseType] = useState(CASE_TYPES[0]);
+  const [caseType, setCaseType] = useState<string>(CASE_TYPES[0]);
   const [respondent, setRespondent] = useState('');
   const [claimSummary, setClaimSummary] = useState('');
   const [requestedOutcome, setRequestedOutcome] = useState('');
