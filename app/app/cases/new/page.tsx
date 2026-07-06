@@ -22,8 +22,6 @@ export default function CaseIntakePage() {
   const [claimSummary, setClaimSummary] = useState('');
   const [requestedOutcome, setRequestedOutcome] = useState('');
   const [contextNotes, setContextNotes] = useState('');
-  const [bondAmount, setBondAmount] = useState('0');
-
   const [evidenceLinks, setEvidenceLinks] = useState<{ label: string; url: string; summary: string }[]>([
     { label: '', url: '', summary: '' },
   ]);
@@ -60,7 +58,6 @@ export default function CaseIntakePage() {
         requestedOutcome,
         JSON.stringify(evidenceLinks.filter(e => e.label || e.url)),
         contextNotes,
-        bondAmount,
       ]);
 
       if (result.status === 'error') {
@@ -185,15 +182,6 @@ export default function CaseIntakePage() {
           <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={addEvidence}>
             <Plus className="w-3.5 h-3.5" /> Add Evidence
           </Button>
-        </Card>
-
-        <Card>
-          <h2 className="text-lg font-medium mb-4">Bond</h2>
-          <div>
-            <Label htmlFor="bondAmount">Bond Amount</Label>
-            <Input id="bondAmount" type="text" placeholder="0" value={bondAmount} onChange={e => setBondAmount(e.target.value)} />
-            <p className="text-xs text-[var(--muted)] mt-1">If the verdict is bad_faith_claim, this bond may be forfeited.</p>
-          </div>
         </Card>
 
         <Button type="submit" size="lg" loading={txStatus === 'confirming' || txStatus === 'pending'}>
