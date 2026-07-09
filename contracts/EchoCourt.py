@@ -137,30 +137,16 @@ class EchoCourt(gl.Contract):
             respondent_text = rd.get("respondent_statement", "")
 
         evidence_lines = []
-        fetched_sources = []
         for item in case.get("evidence_links", []):
-            label = item.get("label", "")
-            url = item.get("url", "")
-            summary = item.get("summary", "")
-            evidence_lines.append(label + ": " + summary)
-            if url and (url.startswith("http://") or url.startswith("https://")):
-                page_content = gl.get_webpage(url, mode="text")
-                fetched_sources.append("Fetched from " + url + ":\n" + page_content[:2000])
+            evidence_lines.append(item.get("label", "") + ": " + item.get("summary", ""))
         evidence_text = "\n".join(evidence_lines) if evidence_lines else "None"
-
-        if fetched_sources:
-            verified_text = "\n\n---\n\n".join(fetched_sources)
-        else:
-            verified_text = "No URLs were provided for on-chain verification."
 
         prompt = "You are an EchoCourt validator interpreting a social-context dispute.\n"
         prompt += "Charter: " + charter_text + "\n"
         prompt += "Claimant: " + claimant_text + "\n"
         prompt += "Respondent: " + respondent_text + "\n"
         prompt += "Evidence: " + evidence_text + "\n"
-        prompt += "Verified web content fetched on-chain:\n" + verified_text + "\n"
         prompt += "Context: " + case.get("context_notes", "") + "\n\n"
-        prompt += "IMPORTANT: Cross-reference claims against the verified web content. If no URLs were verified, lower confidence.\n"
         prompt += "Consider intent, impact, proportionality, and charter alignment.\n"
         prompt += "Return ONLY valid JSON. No markdown.\n"
         prompt += 'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
