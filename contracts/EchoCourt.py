@@ -137,21 +137,19 @@ class EchoCourt(gl.Contract):
             respondent_text = rd.get("respondent_statement", "")
 
         evidence_lines = []
-        fetched_sources = []
+        all_urls = []
         for item in case.get("evidence_links", []):
             label = item.get("label", "")
             url = item.get("url", "")
             summary = item.get("summary", "")
             evidence_lines.append(label + ": " + summary)
             if url and (url.startswith("http://") or url.startswith("https://")):
-                page_content = gl.get_webpage(url, mode="text")
-                fetched_sources.append("Fetched from " + url + ":\n" + page_content[:2000])
+                all_urls.append(url)
         if evidence_lines:
             evidence_text = "\n".join(evidence_lines)
         else:
             evidence_text = "No evidence provided."
 
-        counter_evidence_lines = []
         rj2 = case.get("response_json", "")
         if rj2:
             rd2 = json.loads(rj2)
@@ -159,35 +157,38 @@ class EchoCourt(gl.Contract):
                 label = item.get("label", "")
                 url = item.get("url", "")
                 summary = item.get("summary", "")
-                counter_evidence_lines.append(label + ": " + summary)
+                evidence_lines.append("[Counter] " + label + ": " + summary)
                 if url and (url.startswith("http://") or url.startswith("https://")):
-                    page_content = gl.get_webpage(url, mode="text")
-                    fetched_sources.append("Fetched from " + url + ":\n" + page_content[:2000])
+                    all_urls.append(url)
 
-        if fetched_sources:
-            verified_text = "\n\n---\n\n".join(fetched_sources)
-        else:
-            verified_text = "No URLs were provided for on-chain verification."
-
-        prompt = "You are an EchoCourt validator interpreting a social-context dispute.\n"
-        prompt += "Charter: " + charter_text + "\n"
-        prompt += "Claimant: " + claimant_text + "\n"
-        prompt += "Respondent: " + respondent_text + "\n"
-        prompt += "Evidence submitted:\n" + evidence_text + "\n"
-        prompt += "Validator-verified sources:\n" + verified_text + "\n"
-        prompt += "Context: " + case.get("context_notes", "") + "\n\n"
-        prompt += "IMPORTANT: Base your interpretation on the validator-fetched source content, not just the parties' claims. If no URLs were verified, note reduced confidence.\n"
-        prompt += "Consider intent, impact, proportionality, and charter alignment.\n"
-        prompt += "Return ONLY valid JSON. No markdown.\n"
-        prompt += 'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
-        prompt += "primary_interpretation: no_violation|minor_norm_drift|contextual_misunderstanding|careless_harm|clear_violation|severe_violation|bad_faith_claim|insufficient_context\n"
-        prompt += "impact_level: none|low|medium|high|severe|unclear\n"
-        prompt += "intent_assessment: likely_benign|careless|reckless|targeted|manipulative|unclear\n"
-        prompt += "context_quality: strong_context|partial_context|thin_context|conflicting_context|insufficient_context\n"
-        prompt += "charter_alignment: aligned|borderline|misaligned|clearly_violated|not_applicable|unclear\n"
-        prompt += "recommended_remedy: no_action|private_clarification|public_clarification|mediation|warning|apology_requested|temporary_restriction|role_review|removal_recommended|dismiss_claim|request_more_context\n"
+        base_prompt = "You are an EchoCourt validator interpreting a social-context dispute.\n"
+        base_prompt += "Charter: " + charter_text + "\n"
+        base_prompt += "Claimant: " + claimant_text + "\n"
+        base_prompt += "Respondent: " + respondent_text + "\n"
+        base_prompt += "Evidence submitted:\n" + evidence_text + "\n"
+        base_prompt += "Context: " + case.get("context_notes", "") + "\n\n"
 
         def call_llm():
+            fetched_sources = []
+            for u in all_urls:
+                page_content = gl.get_webpage(u, mode="text")
+                fetched_sources.append("Fetched from " + u + ":\n" + page_content[:2000])
+            if fetched_sources:
+                verified_text = "\n\n---\n\n".join(fetched_sources)
+            else:
+                verified_text = "No URLs were provided for on-chain verification."
+            prompt = base_prompt
+            prompt += "Validator-verified sources:\n" + verified_text + "\n\n"
+            prompt += "IMPORTANT: Base your interpretation on the validator-fetched source content, not just the parties' claims. If no URLs were verified, note reduced confidence.\n"
+            prompt += "Consider intent, impact, proportionality, and charter alignment.\n"
+            prompt += "Return ONLY valid JSON. No markdown.\n"
+            prompt += 'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
+            prompt += "primary_interpretation: no_violation|minor_norm_drift|contextual_misunderstanding|careless_harm|clear_violation|severe_violation|bad_faith_claim|insufficient_context\n"
+            prompt += "impact_level: none|low|medium|high|severe|unclear\n"
+            prompt += "intent_assessment: likely_benign|careless|reckless|targeted|manipulative|unclear\n"
+            prompt += "context_quality: strong_context|partial_context|thin_context|conflicting_context|insufficient_context\n"
+            prompt += "charter_alignment: aligned|borderline|misaligned|clearly_violated|not_applicable|unclear\n"
+            prompt += "recommended_remedy: no_action|private_clarification|public_clarification|mediation|warning|apology_requested|temporary_restriction|role_review|removal_recommended|dismiss_claim|request_more_context\n"
             result = gl.nondet.exec_prompt(prompt)
             result = result.replace("```json", "").replace("```", "").strip()
             return result
