@@ -137,20 +137,19 @@ class EchoCourt(gl.Contract):
             respondent_text = rd.get("respondent_statement", "")
 
         evidence_lines = []
+        fetched_sources = []
         for item in case.get("evidence_links", []):
             label = item.get("label", "")
             url = item.get("url", "")
             summary = item.get("summary", "")
-            fetched = ""
-            if url:
-                try:
-                    fetched = gl.get_webpage(url, mode="text")
-                except Exception:
-                    fetched = "[Could not fetch URL]"
             evidence_lines.append(label + ": " + summary)
-            if fetched:
-                evidence_lines.append("  Fetched content: " + fetched[:2000])
-        evidence_text = "\n".join(evidence_lines) if evidence_lines else "None"
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                page_content = gl.get_webpage(url, mode="text")
+                fetched_sources.append("Fetched from " + url + ":\n" + page_content[:2000])
+        if evidence_lines:
+            evidence_text = "\n".join(evidence_lines)
+        else:
+            evidence_text = "No evidence provided."
 
         counter_evidence_lines = []
         rj2 = case.get("response_json", "")
@@ -160,25 +159,24 @@ class EchoCourt(gl.Contract):
                 label = item.get("label", "")
                 url = item.get("url", "")
                 summary = item.get("summary", "")
-                fetched = ""
-                if url:
-                    try:
-                        fetched = gl.get_webpage(url, mode="text")
-                    except Exception:
-                        fetched = "[Could not fetch URL]"
                 counter_evidence_lines.append(label + ": " + summary)
-                if fetched:
-                    counter_evidence_lines.append("  Fetched content: " + fetched[:2000])
-        counter_evidence_text = "\n".join(counter_evidence_lines) if counter_evidence_lines else "None"
+                if url and (url.startswith("http://") or url.startswith("https://")):
+                    page_content = gl.get_webpage(url, mode="text")
+                    fetched_sources.append("Fetched from " + url + ":\n" + page_content[:2000])
+
+        if fetched_sources:
+            verified_text = "\n\n---\n\n".join(fetched_sources)
+        else:
+            verified_text = "No URLs were provided for on-chain verification."
 
         prompt = "You are an EchoCourt validator interpreting a social-context dispute.\n"
         prompt += "Charter: " + charter_text + "\n"
         prompt += "Claimant: " + claimant_text + "\n"
         prompt += "Respondent: " + respondent_text + "\n"
-        prompt += "Evidence (validator-fetched from submitted URLs):\n" + evidence_text + "\n"
-        prompt += "Counter-Evidence (validator-fetched from submitted URLs):\n" + counter_evidence_text + "\n"
+        prompt += "Evidence submitted:\n" + evidence_text + "\n"
+        prompt += "Validator-verified sources:\n" + verified_text + "\n"
         prompt += "Context: " + case.get("context_notes", "") + "\n\n"
-        prompt += "IMPORTANT: Base your interpretation on the fetched evidence content, not just the parties' claims. If evidence could not be fetched, note that in your reasoning and lower confidence accordingly.\n"
+        prompt += "IMPORTANT: Base your interpretation on the validator-fetched source content, not just the parties' claims. If no URLs were verified, note reduced confidence.\n"
         prompt += "Consider intent, impact, proportionality, and charter alignment.\n"
         prompt += "Return ONLY valid JSON. No markdown.\n"
         prompt += 'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
