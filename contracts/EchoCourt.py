@@ -138,15 +138,47 @@ class EchoCourt(gl.Contract):
 
         evidence_lines = []
         for item in case.get("evidence_links", []):
-            evidence_lines.append(item.get("label", "") + ": " + item.get("summary", ""))
+            label = item.get("label", "")
+            url = item.get("url", "")
+            summary = item.get("summary", "")
+            fetched = ""
+            if url:
+                try:
+                    fetched = gl.get_webpage(url, mode="text")
+                except Exception:
+                    fetched = "[Could not fetch URL]"
+            evidence_lines.append(label + ": " + summary)
+            if fetched:
+                evidence_lines.append("  Fetched content: " + fetched[:2000])
         evidence_text = "\n".join(evidence_lines) if evidence_lines else "None"
+
+        counter_evidence_lines = []
+        rj2 = case.get("response_json", "")
+        if rj2:
+            rd2 = json.loads(rj2)
+            for item in rd2.get("counter_evidence_links", []):
+                label = item.get("label", "")
+                url = item.get("url", "")
+                summary = item.get("summary", "")
+                fetched = ""
+                if url:
+                    try:
+                        fetched = gl.get_webpage(url, mode="text")
+                    except Exception:
+                        fetched = "[Could not fetch URL]"
+                counter_evidence_lines.append(label + ": " + summary)
+                if fetched:
+                    counter_evidence_lines.append("  Fetched content: " + fetched[:2000])
+        counter_evidence_text = "\n".join(counter_evidence_lines) if counter_evidence_lines else "None"
 
         prompt = "You are an EchoCourt validator interpreting a social-context dispute.\n"
         prompt += "Charter: " + charter_text + "\n"
         prompt += "Claimant: " + claimant_text + "\n"
         prompt += "Respondent: " + respondent_text + "\n"
-        prompt += "Evidence: " + evidence_text + "\n"
+        prompt += "Evidence (validator-fetched from submitted URLs):\n" + evidence_text + "\n"
+        prompt += "Counter-Evidence (validator-fetched from submitted URLs):\n" + counter_evidence_text + "\n"
         prompt += "Context: " + case.get("context_notes", "") + "\n\n"
+        prompt += "IMPORTANT: Base your interpretation on the fetched evidence content, not just the parties' claims. If evidence could not be fetched, note that in your reasoning and lower confidence accordingly.\n"
         prompt += "Consider intent, impact, proportionality, and charter alignment.\n"
         prompt += "Return ONLY valid JSON. No markdown.\n"
         prompt += 'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
