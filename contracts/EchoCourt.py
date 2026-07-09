@@ -1,9 +1,6 @@
-# v0.2.16
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+from genlayer import *
 
 import json
-
-from genlayer import *
 
 
 class EchoCourt(gl.Contract):
@@ -148,59 +145,35 @@ class EchoCourt(gl.Contract):
             evidence_lines.append(label + ": " + summary)
             if url and (url.startswith("http://") or url.startswith("https://")):
                 page_content = gl.get_webpage(url, mode="text")
-                snippet = page_content[:2000]
-                fetched_sources.append("Fetched from " + url + ":\n" + snippet)
-        if evidence_lines:
-            evidence_text = "\n".join(evidence_lines)
-        else:
-            evidence_text = "No evidence provided."
-
-        rj2 = case.get("response_json", "")
-        if rj2:
-            rd2 = json.loads(rj2)
-            for item in rd2.get("counter_evidence_links", []):
-                label = item.get("label", "")
-                url = item.get("url", "")
-                summary = item.get("summary", "")
-                evidence_lines.append("[Counter] " + label + ": " + summary)
-                if url and (url.startswith("http://") or url.startswith("https://")):
-                    page_content = gl.get_webpage(url, mode="text")
-                    snippet = page_content[:2000]
-                    fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+                fetched_sources.append("Fetched from " + url + ":\n" + page_content[:2000])
+        evidence_text = "\n".join(evidence_lines) if evidence_lines else "None"
 
         if fetched_sources:
             verified_text = "\n\n---\n\n".join(fetched_sources)
         else:
             verified_text = "No URLs were provided for on-chain verification."
 
-        prompt = (
-            "You are an EchoCourt validator interpreting a social-context dispute.\n"
-            "IMPORTANT: You have been given VERIFIED web content fetched on-chain by the validators.\n"
-            "Use the verified content to check whether the parties' claims are supported by evidence.\n"
-            "If no verified content was fetched, note that evidence is unverified and lower confidence.\n\n"
-            "Charter: " + charter_text + "\n"
-            "Claimant: " + claimant_text + "\n"
-            "Respondent: " + respondent_text + "\n"
-            "Evidence submitted:\n" + evidence_text + "\n\n"
-            "Verified web content fetched on-chain:\n" + verified_text + "\n\n"
-            "Context: " + case.get("context_notes", "") + "\n\n"
-            "Cross-reference the claimed evidence against the verified web content.\n"
-            "Consider intent, impact, proportionality, and charter alignment.\n"
-            "Return ONLY valid JSON. No markdown.\n"
-            'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
-            "primary_interpretation: no_violation|minor_norm_drift|contextual_misunderstanding|careless_harm|clear_violation|severe_violation|bad_faith_claim|insufficient_context\n"
-            "impact_level: none|low|medium|high|severe|unclear\n"
-            "intent_assessment: likely_benign|careless|reckless|targeted|manipulative|unclear\n"
-            "context_quality: strong_context|partial_context|thin_context|conflicting_context|insufficient_context\n"
-            "charter_alignment: aligned|borderline|misaligned|clearly_violated|not_applicable|unclear\n"
-            "recommended_remedy: no_action|private_clarification|public_clarification|mediation|warning|apology_requested|temporary_restriction|role_review|removal_recommended|dismiss_claim|request_more_context\n"
-            "Do not include markdown formatting. Do not include ```json or ```.\n"
-            "Your output must be only JSON without any formatting prefix or suffix."
-        )
+        prompt = "You are an EchoCourt validator interpreting a social-context dispute.\n"
+        prompt += "Charter: " + charter_text + "\n"
+        prompt += "Claimant: " + claimant_text + "\n"
+        prompt += "Respondent: " + respondent_text + "\n"
+        prompt += "Evidence: " + evidence_text + "\n"
+        prompt += "Verified web content fetched on-chain:\n" + verified_text + "\n"
+        prompt += "Context: " + case.get("context_notes", "") + "\n\n"
+        prompt += "IMPORTANT: Cross-reference claims against the verified web content. If no URLs were verified, lower confidence.\n"
+        prompt += "Consider intent, impact, proportionality, and charter alignment.\n"
+        prompt += "Return ONLY valid JSON. No markdown.\n"
+        prompt += 'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
+        prompt += "primary_interpretation: no_violation|minor_norm_drift|contextual_misunderstanding|careless_harm|clear_violation|severe_violation|bad_faith_claim|insufficient_context\n"
+        prompt += "impact_level: none|low|medium|high|severe|unclear\n"
+        prompt += "intent_assessment: likely_benign|careless|reckless|targeted|manipulative|unclear\n"
+        prompt += "context_quality: strong_context|partial_context|thin_context|conflicting_context|insufficient_context\n"
+        prompt += "charter_alignment: aligned|borderline|misaligned|clearly_violated|not_applicable|unclear\n"
+        prompt += "recommended_remedy: no_action|private_clarification|public_clarification|mediation|warning|apology_requested|temporary_restriction|role_review|removal_recommended|dismiss_claim|request_more_context\n"
 
-        def call_llm() -> str:
+        def call_llm():
             result = gl.nondet.exec_prompt(prompt)
-            result = result.replace("```json", "").replace("```", "")
+            result = result.replace("```json", "").replace("```", "").strip()
             return result
 
         result = gl.eq_principle.prompt_comparative(
