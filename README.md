@@ -39,7 +39,7 @@ Each verdict evaluates:
 
 Deployed on GenLayer StudioNet at:
 ```
-0xb892700832992B9F343ecc8C878B30A669a2908f
+0x91d87c8126d25d86284a051cCb2c963E7dF805c9
 ```
 
 Contract source: [`contracts/EchoCourt.py`](contracts/EchoCourt.py)
@@ -49,10 +49,12 @@ Contract source: [`contracts/EchoCourt.py`](contracts/EchoCourt.py)
 | Method | Type | Description |
 |--------|------|-------------|
 | `create_charter` | write | Register a community charter with norms and policies |
-| `submit_case` | write | Open a new dispute case |
-| `submit_response` | write | Respondent submits their side |
-| `request_interpretation` | write | Trigger AI validator interpretation |
-| `appeal_case` | write | Appeal a decided verdict |
+| `submit_case` | write | Open a new dispute case (caller-bound) |
+| `submit_response` | write | Respondent submits their side (respondent-only) |
+| `request_interpretation` | write | Trigger AI validator interpretation (parties-only, human review fallback) |
+| `appeal_case` | write | Appeal a decided verdict (parties-only) |
+| `resolve_appeal` | write | AI re-evaluates with appeal arguments (upheld/modified/overturned) |
+| `flag_for_human_review` | write | Charter creator flags a case for human review |
 | `get_case` | view | Read case details |
 | `get_verdict` | view | Read verdict for a case |
 | `get_charter` | view | Read community charter |
@@ -76,7 +78,7 @@ npm run dev
 
 Set your contract address in `.env.local`:
 ```
-NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS=0xb892700832992B9F343ecc8C878B30A669a2908f
+NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS=0x91d87c8126d25d86284a051cCb2c963E7dF805c9
 ```
 
 ## Project Structure

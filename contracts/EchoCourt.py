@@ -106,7 +106,13 @@ class EchoCourt(gl.Contract):
         if case_id not in self.cases:
             raise gl.vm.UserError("Case not found")
         case = json.loads(self.cases[case_id])
+        caller = gl.message.sender_address.as_hex
+        if case["respondent"] != caller:
+            raise gl.vm.UserError("Only the named respondent can submit a response")
+        if case["status"] != "SUBMITTED":
+            raise gl.vm.UserError("Case is not awaiting a response")
         response_data = json.dumps({
+            "respondent_address": caller,
             "respondent_statement": respondent_statement,
             "counter_evidence_links": json.loads(counter_evidence_json),
             "context_explanation": context_explanation,
@@ -122,6 +128,9 @@ class EchoCourt(gl.Contract):
         if case_id not in self.cases:
             raise gl.vm.UserError("Case not found")
         case = json.loads(self.cases[case_id])
+        caller = gl.message.sender_address.as_hex
+        if caller != case["claimant"] and caller != case["respondent"]:
+            raise gl.vm.UserError("Only case parties can request interpretation")
 
         community_id = case["community_id"]
         charter = {}
@@ -167,7 +176,28 @@ class EchoCourt(gl.Contract):
             "The result must have the same primary_interpretation and recommended_remedy.",
         )
 
-        parsed = json.loads(result)
+        try:
+            parsed = json.loads(result)
+        except Exception:
+            verdict_record = json.dumps({
+                "case_id": case_id,
+                "primary_interpretation": "insufficient_context",
+                "impact_level": "unclear",
+                "intent_assessment": "unclear",
+                "context_quality": "insufficient_context",
+                "charter_alignment": "unclear",
+                "recommended_remedy": "request_more_context",
+                "confidence": 0,
+                "short_reason": "AI result could not be parsed. Human review required.",
+                "needs_human_review": True,
+                "raw_result": result[:500],
+            })
+            self.verdicts[case_id] = verdict_record
+            case["status"] = "NEEDS_HUMAN_REVIEW"
+            case["interpretation_requested_by"] = caller
+            self.cases[case_id] = json.dumps(case)
+            return verdict_record
+
         verdict_record = json.dumps({
             "case_id": case_id,
             "primary_interpretation": parsed.get("primary_interpretation", ""),
@@ -178,9 +208,11 @@ class EchoCourt(gl.Contract):
             "recommended_remedy": parsed.get("recommended_remedy", ""),
             "confidence": parsed.get("confidence", 0),
             "short_reason": parsed.get("short_reason", ""),
+            "needs_human_review": False,
         })
         self.verdicts[case_id] = verdict_record
         case["status"] = "DECIDED"
+        case["interpretation_requested_by"] = caller
         self.cases[case_id] = json.dumps(case)
         return result
 
@@ -196,11 +228,15 @@ class EchoCourt(gl.Contract):
         if case_id not in self.cases:
             raise gl.vm.UserError("Case not found")
         case = json.loads(self.cases[case_id])
-        if case["status"] != "DECIDED":
+        caller = gl.message.sender_address.as_hex
+        if caller != case["claimant"] and caller != case["respondent"]:
+            raise gl.vm.UserError("Only case parties can appeal")
+        if case["status"] != "DECIDED" and case["status"] != "NEEDS_HUMAN_REVIEW":
             raise gl.vm.UserError("Case must be decided before appeal")
 
         appeal_record = json.dumps({
             "case_id": case_id,
+            "appealed_by": caller,
             "basis": appeal_basis,
             "explanation": explanation,
             "new_evidence_links": json.loads(new_evidence_json),
@@ -209,6 +245,130 @@ class EchoCourt(gl.Contract):
         })
         self.appeals[case_id] = appeal_record
         case["status"] = "APPEALED"
+        self.cases[case_id] = json.dumps(case)
+        return case_id
+
+    @gl.public.write
+    def resolve_appeal(self, case_id: str) -> str:
+        if case_id not in self.cases:
+            raise gl.vm.UserError("Case not found")
+        case = json.loads(self.cases[case_id])
+        if case["status"] != "APPEALED":
+            raise gl.vm.UserError("Case must be appealed first")
+        if case_id not in self.appeals:
+            raise gl.vm.UserError("Appeal record not found")
+
+        appeal = json.loads(self.appeals[case_id])
+        prev_verdict = {}
+        if case_id in self.verdicts:
+            prev_verdict = json.loads(self.verdicts[case_id])
+
+        community_id = case["community_id"]
+        charter = {}
+        if community_id in self.charters:
+            charter = json.loads(self.charters[community_id])
+
+        charter_text = charter.get("summary", "No charter provided.")
+        claimant_text = case.get("claim_summary", "")
+        respondent_text = ""
+        rj = case.get("response_json", "")
+        if rj:
+            rd = json.loads(rj)
+            respondent_text = rd.get("respondent_statement", "")
+
+        evidence_lines = []
+        for item in case.get("evidence_links", []):
+            evidence_lines.append(item.get("label", "") + ": " + item.get("summary", ""))
+        for item in appeal.get("new_evidence_links", []):
+            evidence_lines.append("[APPEAL] " + item.get("label", "") + ": " + item.get("summary", ""))
+        evidence_text = "\n".join(evidence_lines) if evidence_lines else "None"
+
+        prev_interp = prev_verdict.get("primary_interpretation", "unknown")
+        prev_remedy = prev_verdict.get("recommended_remedy", "unknown")
+        prev_reason = prev_verdict.get("short_reason", "unknown")
+
+        prompt = "You are an EchoCourt APPEAL validator re-evaluating a social-context dispute.\n"
+        prompt += "A previous verdict was issued and one party has appealed.\n\n"
+        prompt += "PREVIOUS VERDICT:\n"
+        prompt += "- Interpretation: " + prev_interp + "\n"
+        prompt += "- Remedy: " + prev_remedy + "\n"
+        prompt += "- Reason: " + prev_reason + "\n\n"
+        prompt += "APPEAL BASIS: " + appeal.get("basis", "") + "\n"
+        prompt += "APPEAL EXPLANATION: " + appeal.get("explanation", "") + "\n"
+        prompt += "REQUESTED CORRECTION: " + appeal.get("requested_correction", "") + "\n\n"
+        prompt += "Charter: " + charter_text + "\n"
+        prompt += "Claimant: " + claimant_text + "\n"
+        prompt += "Respondent: " + respondent_text + "\n"
+        prompt += "All Evidence (original + appeal): " + evidence_text + "\n"
+        prompt += "Context: " + case.get("context_notes", "") + "\n\n"
+        prompt += "Re-evaluate with the appeal arguments and new evidence in mind.\n"
+        prompt += "You may UPHOLD, MODIFY, or OVERTURN the previous verdict.\n"
+        prompt += "Return ONLY valid JSON. No markdown.\n"
+        prompt += 'Return: {"appeal_outcome":"...","primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
+        prompt += "appeal_outcome: upheld|modified|overturned\n"
+        prompt += "primary_interpretation: no_violation|minor_norm_drift|contextual_misunderstanding|careless_harm|clear_violation|severe_violation|bad_faith_claim|insufficient_context\n"
+        prompt += "impact_level: none|low|medium|high|severe|unclear\n"
+        prompt += "intent_assessment: likely_benign|careless|reckless|targeted|manipulative|unclear\n"
+        prompt += "context_quality: strong_context|partial_context|thin_context|conflicting_context|insufficient_context\n"
+        prompt += "charter_alignment: aligned|borderline|misaligned|clearly_violated|not_applicable|unclear\n"
+        prompt += "recommended_remedy: no_action|private_clarification|public_clarification|mediation|warning|apology_requested|temporary_restriction|role_review|removal_recommended|dismiss_claim|request_more_context\n"
+
+        def call_llm():
+            result = gl.nondet.exec_prompt(prompt)
+            result = result.replace("```json", "").replace("```", "").strip()
+            return result
+
+        result = gl.eq_principle.prompt_comparative(
+            call_llm,
+            "The result must have the same appeal_outcome and recommended_remedy.",
+        )
+
+        try:
+            parsed = json.loads(result)
+        except Exception:
+            appeal["status"] = "NEEDS_HUMAN_REVIEW"
+            self.appeals[case_id] = json.dumps(appeal)
+            case["status"] = "APPEAL_NEEDS_HUMAN_REVIEW"
+            self.cases[case_id] = json.dumps(case)
+            return json.dumps({"error": "Appeal result could not be parsed. Human review required.", "raw": result[:500]})
+
+        verdict_record = json.dumps({
+            "case_id": case_id,
+            "appeal_outcome": parsed.get("appeal_outcome", ""),
+            "primary_interpretation": parsed.get("primary_interpretation", ""),
+            "impact_level": parsed.get("impact_level", ""),
+            "intent_assessment": parsed.get("intent_assessment", ""),
+            "context_quality": parsed.get("context_quality", ""),
+            "charter_alignment": parsed.get("charter_alignment", ""),
+            "recommended_remedy": parsed.get("recommended_remedy", ""),
+            "confidence": parsed.get("confidence", 0),
+            "short_reason": parsed.get("short_reason", ""),
+            "is_appeal_verdict": True,
+            "needs_human_review": False,
+        })
+        self.verdicts[case_id] = verdict_record
+        appeal["status"] = "resolved"
+        appeal["outcome"] = parsed.get("appeal_outcome", "")
+        self.appeals[case_id] = json.dumps(appeal)
+        case["status"] = "APPEAL_DECIDED"
+        self.cases[case_id] = json.dumps(case)
+        return result
+
+    @gl.public.write
+    def flag_for_human_review(self, case_id: str, reason: str) -> str:
+        if case_id not in self.cases:
+            raise gl.vm.UserError("Case not found")
+        case = json.loads(self.cases[case_id])
+        caller = gl.message.sender_address.as_hex
+        charter = {}
+        community_id = case["community_id"]
+        if community_id in self.charters:
+            charter = json.loads(self.charters[community_id])
+        if charter.get("created_by", "") != caller:
+            raise gl.vm.UserError("Only the charter creator can flag for human review")
+        case["status"] = "NEEDS_HUMAN_REVIEW"
+        case["human_review_reason"] = reason
+        case["flagged_by"] = caller
         self.cases[case_id] = json.dumps(case)
         return case_id
 
