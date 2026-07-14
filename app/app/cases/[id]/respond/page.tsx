@@ -7,9 +7,37 @@ import { Card } from '@/components/ui/Card';
 import { Input, Textarea, Label } from '@/components/ui/Input';
 import { TransactionToast } from '@/components/wallet/TransactionToast';
 import { sendTransaction, waitForReceipt } from '@/lib/genlayer/client';
-import { MessageSquare, Plus, X } from 'lucide-react';
+import { MessageSquare, Plus, X, ImagePlus } from 'lucide-react';
 
 type TxStatus = 'preparing' | 'confirming' | 'pending' | 'success' | 'error';
+
+function resizeImage(file: File, maxWidth: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = Math.round((h * maxWidth) / w);
+          w = maxWidth;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('No canvas context')); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function RespondPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -17,7 +45,7 @@ export default function RespondPage({ params }: { params: Promise<{ id: string }
   const [statement, setStatement] = useState('');
   const [contextExplanation, setContextExplanation] = useState('');
   const [mitigatingFactors, setMitigatingFactors] = useState('');
-  const [counterEvidence, setCounterEvidence] = useState<{ label: string; url: string; summary: string }[]>([
+  const [counterEvidence, setCounterEvidence] = useState<{ label: string; url: string; summary: string; image?: string }[]>([
     { label: '', url: '', summary: '' },
   ]);
   const [txStatus, setTxStatus] = useState<TxStatus | null>(null);
@@ -32,6 +60,22 @@ export default function RespondPage({ params }: { params: Promise<{ id: string }
   function updateEvidence(i: number, field: string, value: string) {
     const updated = [...counterEvidence];
     (updated[i] as Record<string, string>)[field] = value;
+    setCounterEvidence(updated);
+  }
+  async function handleImageUpload(i: number, file: File) {
+    try {
+      const dataUrl = await resizeImage(file, 800);
+      const updated = [...counterEvidence];
+      updated[i] = { ...updated[i], image: dataUrl };
+      if (!updated[i].label) {
+        updated[i].label = file.name.replace(/\.[^.]+$/, '');
+      }
+      setCounterEvidence(updated);
+    } catch { /* ignore */ }
+  }
+  function removeImage(i: number) {
+    const updated = [...counterEvidence];
+    updated[i] = { ...updated[i], image: undefined };
     setCounterEvidence(updated);
   }
 
@@ -126,8 +170,22 @@ export default function RespondPage({ params }: { params: Promise<{ id: string }
                   )}
                 </div>
                 <Input placeholder="Label" value={ev.label} onChange={e => updateEvidence(i, 'label', e.target.value)} />
-                <Input placeholder="URL" value={ev.url} onChange={e => updateEvidence(i, 'url', e.target.value)} />
+                <Input placeholder="URL (optional if uploading screenshot)" value={ev.url} onChange={e => updateEvidence(i, 'url', e.target.value)} />
                 <Input placeholder="Summary" value={ev.summary} onChange={e => updateEvidence(i, 'summary', e.target.value)} />
+                {ev.image ? (
+                  <div className="relative mt-1">
+                    <img src={ev.image} alt={ev.label || 'Evidence screenshot'} className="rounded-lg border border-[var(--border)] max-h-48 object-contain" />
+                    <button type="button" onClick={() => removeImage(i)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 text-xs text-[var(--signal-blue)] cursor-pointer hover:underline mt-1">
+                    <ImagePlus className="w-4 h-4" />
+                    Upload Screenshot
+                    <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(i, f); }} />
+                  </label>
+                )}
               </div>
             ))}
           </div>

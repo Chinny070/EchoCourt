@@ -19,6 +19,7 @@ export type EvidenceLink = {
   url: string;
   summary: string;
   hash?: string;
+  image?: string;
 };
 
 export type EchoCase = {
