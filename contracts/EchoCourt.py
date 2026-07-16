@@ -1,6 +1,9 @@
-from genlayer import *
+# v0.2.16
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 import json
+
+from genlayer import *
 
 
 class EchoCourt(gl.Contract):
@@ -15,19 +18,7 @@ class EchoCourt(gl.Contract):
         self.case_count = u256(0)
 
     @gl.public.write
-    def create_charter(
-        self,
-        community_id: str,
-        community_name: str,
-        charter_title: str,
-        charter_summary: str,
-        allowed_norms_json: str,
-        forbidden_behaviours_json: str,
-        tone_expectations: str,
-        remedy_policy: str,
-        appeal_policy: str,
-        bond_amount: str,
-    ) -> str:
+    def create_charter(self, community_id: str, community_name: str, charter_title: str, charter_summary: str, allowed_norms_json: str, forbidden_behaviours_json: str, tone_expectations: str, remedy_policy: str, appeal_policy: str, bond_amount: str) -> str:
         if not community_id or len(community_id) > 200:
             raise gl.vm.UserError("Community ID must be 1-200 characters")
         caller = gl.message.sender_address.as_hex
@@ -43,31 +34,19 @@ class EchoCourt(gl.Contract):
             "appeal_policy": appeal_policy,
             "bond_amount": bond_amount,
             "status": "active",
-            "created_by": caller,
+            "created_by": caller
         })
         self.charters[community_id] = record
         return community_id
 
     @gl.public.write
-    def submit_case(
-        self,
-        case_id: str,
-        community_id: str,
-        case_title: str,
-        case_type: str,
-        respondent: str,
-        claim_summary: str,
-        requested_outcome: str,
-        evidence_links_json: str,
-        context_notes: str,
-    ) -> str:
+    def submit_case(self, case_id: str, community_id: str, case_title: str, case_type: str, respondent: str, claim_summary: str, requested_outcome: str, evidence_links_json: str, context_notes: str) -> str:
         if not case_id or len(case_id) > 200:
             raise gl.vm.UserError("Case ID must be 1-200 characters")
         if community_id not in self.charters:
             raise gl.vm.UserError("Community charter not found")
         if case_id in self.cases:
             raise gl.vm.UserError("Case ID already exists")
-
         caller = gl.message.sender_address.as_hex
         record = json.dumps({
             "case_id": case_id,
@@ -81,11 +60,10 @@ class EchoCourt(gl.Contract):
             "evidence_links": json.loads(evidence_links_json),
             "context_notes": context_notes,
             "status": "SUBMITTED",
-            "response_json": "",
+            "response_json": ""
         })
         self.cases[case_id] = record
-        self.case_count = u256(int(self.case_count) + 1)
-
+        self.case_count = self.case_count + u256(1)
         if community_id in self.community_cases:
             ids = json.loads(self.community_cases[community_id])
         else:
@@ -95,14 +73,7 @@ class EchoCourt(gl.Contract):
         return case_id
 
     @gl.public.write
-    def submit_response(
-        self,
-        case_id: str,
-        respondent_statement: str,
-        counter_evidence_json: str,
-        context_explanation: str,
-        mitigating_factors: str,
-    ) -> str:
+    def submit_response(self, case_id: str, respondent_statement: str, counter_evidence_json: str, context_explanation: str, mitigating_factors: str) -> str:
         if case_id not in self.cases:
             raise gl.vm.UserError("Case not found")
         case = json.loads(self.cases[case_id])
@@ -116,7 +87,7 @@ class EchoCourt(gl.Contract):
             "respondent_statement": respondent_statement,
             "counter_evidence_links": json.loads(counter_evidence_json),
             "context_explanation": context_explanation,
-            "mitigating_factors": mitigating_factors,
+            "mitigating_factors": mitigating_factors
         })
         case["response_json"] = response_data
         case["status"] = "READY_FOR_INTERPRETATION"
@@ -146,34 +117,62 @@ class EchoCourt(gl.Contract):
             respondent_text = rd.get("respondent_statement", "")
 
         evidence_lines = []
+        fetched_sources = []
         for item in case.get("evidence_links", []):
-            evidence_lines.append(item.get("label", "") + ": " + item.get("summary", ""))
-        evidence_text = "\n".join(evidence_lines) if evidence_lines else "None"
+            line = "- " + item.get("label", "") + ": " + item.get("summary", "")
+            evidence_lines.append(line)
+            url = item.get("url", "")
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                page_content = gl.get_webpage(url, mode="text")
+                snippet = page_content[:3000]
+                fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+        if evidence_lines:
+            evidence_text = "\n".join(evidence_lines)
+        else:
+            evidence_text = "No evidence provided."
 
-        prompt = "You are an EchoCourt validator interpreting a social-context dispute.\n"
-        prompt += "Charter: " + charter_text + "\n"
-        prompt += "Claimant: " + claimant_text + "\n"
-        prompt += "Respondent: " + respondent_text + "\n"
-        prompt += "Evidence: " + evidence_text + "\n"
-        prompt += "Context: " + case.get("context_notes", "") + "\n\n"
-        prompt += "Consider intent, impact, proportionality, and charter alignment.\n"
-        prompt += "Return ONLY valid JSON. No markdown.\n"
-        prompt += 'Return: {"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
-        prompt += "primary_interpretation: no_violation|minor_norm_drift|contextual_misunderstanding|careless_harm|clear_violation|severe_violation|bad_faith_claim|insufficient_context\n"
-        prompt += "impact_level: none|low|medium|high|severe|unclear\n"
-        prompt += "intent_assessment: likely_benign|careless|reckless|targeted|manipulative|unclear\n"
-        prompt += "context_quality: strong_context|partial_context|thin_context|conflicting_context|insufficient_context\n"
-        prompt += "charter_alignment: aligned|borderline|misaligned|clearly_violated|not_applicable|unclear\n"
-        prompt += "recommended_remedy: no_action|private_clarification|public_clarification|mediation|warning|apology_requested|temporary_restriction|role_review|removal_recommended|dismiss_claim|request_more_context\n"
+        if fetched_sources:
+            verified_text = "\n\n---\n\n".join(fetched_sources)
+        else:
+            verified_text = "No URLs were provided for on-chain verification."
 
-        def call_llm():
+        context_text = case.get("context_notes", "")
+
+        prompt = (
+            "You are an EchoCourt validator interpreting a social-context dispute.\n"
+            "You are NOT a lawyer; do NOT give legal advice.\n\n"
+            "IMPORTANT: You have been given VERIFIED web content fetched on-chain by the validators.\n"
+            "Use the verified content to check whether the parties' claims are supported.\n"
+            "If no verified content was fetched, note that evidence is unverified and weigh it accordingly.\n\n"
+            "Return ONLY valid JSON with exactly these fields:\n"
+            '{"primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n\n'
+            "Where primary_interpretation is no_violation or minor_norm_drift or contextual_misunderstanding or careless_harm or clear_violation or severe_violation or bad_faith_claim or insufficient_context.\n"
+            "Where impact_level is none or low or medium or high or severe or unclear.\n"
+            "Where intent_assessment is likely_benign or careless or reckless or targeted or manipulative or unclear.\n"
+            "Where context_quality is strong_context or partial_context or thin_context or conflicting_context or insufficient_context.\n"
+            "Where charter_alignment is aligned or borderline or misaligned or clearly_violated or not_applicable or unclear.\n"
+            "Where recommended_remedy is no_action or private_clarification or public_clarification or mediation or warning or apology_requested or temporary_restriction or removal_recommended or dismiss_claim or request_more_context.\n\n"
+            "Charter:\n" + charter_text + "\n\n"
+            "Claimant statement:\n" + claimant_text + "\n\n"
+            "Respondent statement:\n" + respondent_text + "\n\n"
+            "Evidence submitted:\n" + evidence_text + "\n\n"
+            "Verified web content fetched on-chain:\n" + verified_text + "\n\n"
+            "Context:\n" + context_text + "\n\n"
+            "Cross-reference the claimed evidence against the verified web content.\n"
+            "Evaluate carefully. Return ONLY the JSON object.\n"
+            "Do not include markdown formatting. Do not include ```json or ```.\n"
+            "Your output must be only JSON without any formatting prefix or suffix."
+        )
+
+        def call_llm() -> str:
             result = gl.nondet.exec_prompt(prompt)
-            result = result.replace("```json", "").replace("```", "").strip()
+            result = result.replace("```json", "").replace("```", "")
+            print(result)
             return result
 
         result = gl.eq_principle.prompt_comparative(
             call_llm,
-            "The result must have the same primary_interpretation and recommended_remedy.",
+            "The value of primary_interpretation and recommended_remedy must match"
         )
 
         try:
@@ -190,7 +189,7 @@ class EchoCourt(gl.Contract):
                 "confidence": 0,
                 "short_reason": "AI result could not be parsed. Human review required.",
                 "needs_human_review": True,
-                "raw_result": result[:500],
+                "raw_result": result[:500]
             })
             self.verdicts[case_id] = verdict_record
             case["status"] = "NEEDS_HUMAN_REVIEW"
@@ -208,7 +207,7 @@ class EchoCourt(gl.Contract):
             "recommended_remedy": parsed.get("recommended_remedy", ""),
             "confidence": parsed.get("confidence", 0),
             "short_reason": parsed.get("short_reason", ""),
-            "needs_human_review": False,
+            "needs_human_review": False
         })
         self.verdicts[case_id] = verdict_record
         case["status"] = "DECIDED"
@@ -217,14 +216,7 @@ class EchoCourt(gl.Contract):
         return result
 
     @gl.public.write
-    def appeal_case(
-        self,
-        case_id: str,
-        appeal_basis: str,
-        explanation: str,
-        new_evidence_json: str,
-        requested_correction: str,
-    ) -> str:
+    def appeal_case(self, case_id: str, appeal_basis: str, explanation: str, new_evidence_json: str, requested_correction: str) -> str:
         if case_id not in self.cases:
             raise gl.vm.UserError("Case not found")
         case = json.loads(self.cases[case_id])
@@ -233,7 +225,6 @@ class EchoCourt(gl.Contract):
             raise gl.vm.UserError("Only case parties can appeal")
         if case["status"] != "DECIDED" and case["status"] != "NEEDS_HUMAN_REVIEW":
             raise gl.vm.UserError("Case must be decided before appeal")
-
         appeal_record = json.dumps({
             "case_id": case_id,
             "appealed_by": caller,
@@ -241,7 +232,7 @@ class EchoCourt(gl.Contract):
             "explanation": explanation,
             "new_evidence_links": json.loads(new_evidence_json),
             "requested_correction": requested_correction,
-            "status": "submitted",
+            "status": "submitted"
         })
         self.appeals[case_id] = appeal_record
         case["status"] = "APPEALED"
@@ -277,50 +268,72 @@ class EchoCourt(gl.Contract):
             respondent_text = rd.get("respondent_statement", "")
 
         evidence_lines = []
+        fetched_sources = []
         for item in case.get("evidence_links", []):
-            evidence_lines.append(item.get("label", "") + ": " + item.get("summary", ""))
+            line = "- " + item.get("label", "") + ": " + item.get("summary", "")
+            evidence_lines.append(line)
+            url = item.get("url", "")
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                page_content = gl.get_webpage(url, mode="text")
+                snippet = page_content[:3000]
+                fetched_sources.append("Fetched from " + url + ":\n" + snippet)
         for item in appeal.get("new_evidence_links", []):
-            evidence_lines.append("[APPEAL] " + item.get("label", "") + ": " + item.get("summary", ""))
-        evidence_text = "\n".join(evidence_lines) if evidence_lines else "None"
+            line = "- [APPEAL] " + item.get("label", "") + ": " + item.get("summary", "")
+            evidence_lines.append(line)
+            url = item.get("url", "")
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                page_content = gl.get_webpage(url, mode="text")
+                snippet = page_content[:3000]
+                fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+        if evidence_lines:
+            evidence_text = "\n".join(evidence_lines)
+        else:
+            evidence_text = "No evidence provided."
+
+        if fetched_sources:
+            verified_text = "\n\n---\n\n".join(fetched_sources)
+        else:
+            verified_text = "No URLs were provided for on-chain verification."
 
         prev_interp = prev_verdict.get("primary_interpretation", "unknown")
         prev_remedy = prev_verdict.get("recommended_remedy", "unknown")
         prev_reason = prev_verdict.get("short_reason", "unknown")
 
-        prompt = "You are an EchoCourt APPEAL validator re-evaluating a social-context dispute.\n"
-        prompt += "A previous verdict was issued and one party has appealed.\n\n"
-        prompt += "PREVIOUS VERDICT:\n"
-        prompt += "- Interpretation: " + prev_interp + "\n"
-        prompt += "- Remedy: " + prev_remedy + "\n"
-        prompt += "- Reason: " + prev_reason + "\n\n"
-        prompt += "APPEAL BASIS: " + appeal.get("basis", "") + "\n"
-        prompt += "APPEAL EXPLANATION: " + appeal.get("explanation", "") + "\n"
-        prompt += "REQUESTED CORRECTION: " + appeal.get("requested_correction", "") + "\n\n"
-        prompt += "Charter: " + charter_text + "\n"
-        prompt += "Claimant: " + claimant_text + "\n"
-        prompt += "Respondent: " + respondent_text + "\n"
-        prompt += "All Evidence (original + appeal): " + evidence_text + "\n"
-        prompt += "Context: " + case.get("context_notes", "") + "\n\n"
-        prompt += "Re-evaluate with the appeal arguments and new evidence in mind.\n"
-        prompt += "You may UPHOLD, MODIFY, or OVERTURN the previous verdict.\n"
-        prompt += "Return ONLY valid JSON. No markdown.\n"
-        prompt += 'Return: {"appeal_outcome":"...","primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
-        prompt += "appeal_outcome: upheld|modified|overturned\n"
-        prompt += "primary_interpretation: no_violation|minor_norm_drift|contextual_misunderstanding|careless_harm|clear_violation|severe_violation|bad_faith_claim|insufficient_context\n"
-        prompt += "impact_level: none|low|medium|high|severe|unclear\n"
-        prompt += "intent_assessment: likely_benign|careless|reckless|targeted|manipulative|unclear\n"
-        prompt += "context_quality: strong_context|partial_context|thin_context|conflicting_context|insufficient_context\n"
-        prompt += "charter_alignment: aligned|borderline|misaligned|clearly_violated|not_applicable|unclear\n"
-        prompt += "recommended_remedy: no_action|private_clarification|public_clarification|mediation|warning|apology_requested|temporary_restriction|role_review|removal_recommended|dismiss_claim|request_more_context\n"
+        prompt = (
+            "You are an EchoCourt APPEAL validator re-evaluating a social-context dispute.\n"
+            "A previous verdict was issued and one party has appealed.\n\n"
+            "IMPORTANT: You have been given VERIFIED web content fetched on-chain by the validators.\n"
+            "Use the verified content to check whether the parties' claims are supported.\n\n"
+            "PREVIOUS VERDICT:\n"
+            "- Interpretation: " + prev_interp + "\n"
+            "- Remedy: " + prev_remedy + "\n"
+            "- Reason: " + prev_reason + "\n\n"
+            "APPEAL BASIS: " + appeal.get("basis", "") + "\n"
+            "APPEAL EXPLANATION: " + appeal.get("explanation", "") + "\n"
+            "REQUESTED CORRECTION: " + appeal.get("requested_correction", "") + "\n\n"
+            "Charter:\n" + charter_text + "\n\n"
+            "Claimant statement:\n" + claimant_text + "\n\n"
+            "Respondent statement:\n" + respondent_text + "\n\n"
+            "All Evidence (original + appeal):\n" + evidence_text + "\n\n"
+            "Verified web content fetched on-chain:\n" + verified_text + "\n\n"
+            "Re-evaluate with the appeal arguments and new evidence in mind.\n"
+            "You may UPHOLD, MODIFY, or OVERTURN the previous verdict.\n"
+            "Return ONLY valid JSON. No markdown.\n"
+            'Return: {"appeal_outcome":"...","primary_interpretation":"...","impact_level":"...","intent_assessment":"...","context_quality":"...","charter_alignment":"...","recommended_remedy":"...","confidence":0,"short_reason":"..."}\n'
+            "appeal_outcome: upheld or modified or overturned\n"
+            "Do not include markdown formatting. Do not include ```json or ```.\n"
+            "Your output must be only JSON without any formatting prefix or suffix."
+        )
 
-        def call_llm():
+        def call_llm() -> str:
             result = gl.nondet.exec_prompt(prompt)
-            result = result.replace("```json", "").replace("```", "").strip()
+            result = result.replace("```json", "").replace("```", "")
+            print(result)
             return result
 
         result = gl.eq_principle.prompt_comparative(
             call_llm,
-            "The result must have the same appeal_outcome and recommended_remedy.",
+            "The result must have the same appeal_outcome and recommended_remedy"
         )
 
         try:
@@ -344,7 +357,7 @@ class EchoCourt(gl.Contract):
             "confidence": parsed.get("confidence", 0),
             "short_reason": parsed.get("short_reason", ""),
             "is_appeal_verdict": True,
-            "needs_human_review": False,
+            "needs_human_review": False
         })
         self.verdicts[case_id] = verdict_record
         appeal["status"] = "resolved"

@@ -39,7 +39,7 @@ Each verdict evaluates:
 
 Deployed on GenLayer StudioNet at:
 ```
-0x91d87c8126d25d86284a051cCb2c963E7dF805c9
+0x145C51E2aFa19920D4806d2C2ECdF71C4C4F61a3
 ```
 
 Contract source: [`contracts/EchoCourt.py`](contracts/EchoCourt.py)
@@ -78,7 +78,7 @@ npm run dev
 
 Set your contract address in `.env.local`:
 ```
-NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS=0x91d87c8126d25d86284a051cCb2c963E7dF805c9
+NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS=0x145C51E2aFa19920D4806d2C2ECdF71C4C4F61a3
 ```
 
 ## Project Structure
