@@ -123,9 +123,12 @@ class EchoCourt(gl.Contract):
             evidence_lines.append(line)
             url = item.get("url", "")
             if url and (url.startswith("http://") or url.startswith("https://")):
-                page_content = gl.get_webpage(url, mode="text")
-                snippet = page_content[:3000]
-                fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+                try:
+                    page_content = gl.get_webpage(url, mode="text")
+                    snippet = page_content[:3000]
+                    fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+                except Exception:
+                    fetched_sources.append("Failed to fetch " + url + " — could not be verified on-chain.")
         if evidence_lines:
             evidence_text = "\n".join(evidence_lines)
         else:
@@ -274,17 +277,23 @@ class EchoCourt(gl.Contract):
             evidence_lines.append(line)
             url = item.get("url", "")
             if url and (url.startswith("http://") or url.startswith("https://")):
-                page_content = gl.get_webpage(url, mode="text")
-                snippet = page_content[:3000]
-                fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+                try:
+                    page_content = gl.get_webpage(url, mode="text")
+                    snippet = page_content[:3000]
+                    fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+                except Exception:
+                    fetched_sources.append("Failed to fetch " + url + " — could not be verified on-chain.")
         for item in appeal.get("new_evidence_links", []):
             line = "- [APPEAL] " + item.get("label", "") + ": " + item.get("summary", "")
             evidence_lines.append(line)
             url = item.get("url", "")
             if url and (url.startswith("http://") or url.startswith("https://")):
-                page_content = gl.get_webpage(url, mode="text")
-                snippet = page_content[:3000]
-                fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+                try:
+                    page_content = gl.get_webpage(url, mode="text")
+                    snippet = page_content[:3000]
+                    fetched_sources.append("Fetched from " + url + ":\n" + snippet)
+                except Exception:
+                    fetched_sources.append("Failed to fetch " + url + " — could not be verified on-chain.")
         if evidence_lines:
             evidence_text = "\n".join(evidence_lines)
         else:

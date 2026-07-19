@@ -121,7 +121,7 @@ Each verdict evaluates across 6 dimensions:
 
 Deployed on GenLayer StudioNet:
 ```
-0x145C51E2aFa19920D4806d2C2ECdF71C4C4F61a3
+0xD233bfF309f6C552A4Be41d7739b2D9a7C7717ED
 ```
 
 Source: [`contracts/EchoCourt.py`](contracts/EchoCourt.py)
@@ -173,7 +173,7 @@ npm run dev
 
 Set your contract address in `.env.local`:
 ```
-NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS=0x145C51E2aFa19920D4806d2C2ECdF71C4C4F61a3
+NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS=0xD233bfF309f6C552A4Be41d7739b2D9a7C7717ED
 ```
 
 ## Project Structure
