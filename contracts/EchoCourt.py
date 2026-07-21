@@ -2,6 +2,7 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 import json
+import typing
 
 from genlayer import *
 
@@ -124,7 +125,8 @@ class EchoCourt(gl.Contract):
             url = item.get("url", "")
             if url and (url.startswith("http://") or url.startswith("https://")):
                 try:
-                    page_content = gl.get_webpage(url, mode="text")
+                    response = gl.nondet.web.get(url)
+                    page_content = response.body.decode("utf-8")
                     snippet = page_content[:3000]
                     fetched_sources.append("Fetched from " + url + ":\n" + snippet)
                 except Exception:
@@ -278,7 +280,8 @@ class EchoCourt(gl.Contract):
             url = item.get("url", "")
             if url and (url.startswith("http://") or url.startswith("https://")):
                 try:
-                    page_content = gl.get_webpage(url, mode="text")
+                    response = gl.nondet.web.get(url)
+                    page_content = response.body.decode("utf-8")
                     snippet = page_content[:3000]
                     fetched_sources.append("Fetched from " + url + ":\n" + snippet)
                 except Exception:
@@ -289,7 +292,8 @@ class EchoCourt(gl.Contract):
             url = item.get("url", "")
             if url and (url.startswith("http://") or url.startswith("https://")):
                 try:
-                    page_content = gl.get_webpage(url, mode="text")
+                    response = gl.nondet.web.get(url)
+                    page_content = response.body.decode("utf-8")
                     snippet = page_content[:3000]
                     fetched_sources.append("Fetched from " + url + ":\n" + snippet)
                 except Exception:
